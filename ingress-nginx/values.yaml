@@ -1,0 +1,119 @@
+ingress-nginx:
+  controller:
+    service:
+      enabled: true
+      type: LoadBalancer
+      externalTrafficPolicy: Local
+    replicaCount: 1
+    allowSnippetAnnotations: true
+
+    extraVolumes:
+      - name: whitelist-config
+        configMap:
+          name: nginx-whitelist-config
+
+    extraVolumeMounts:
+      - name: whitelist-config
+        mountPath: /etc/nginx/configmaps
+        readOnly: true
+
+podinfo:
+  ui:
+    message: "It works as expected!"
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/auth-tls-verify-client: "optional"
+      nginx.ingress.kubernetes.io/auth-tls-secret: "ingress-nginx/mtls-ca-cert"
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        # Load the IP whitelist from the mounted ConfigMap file
+        set_by_lua_block $ip_whitelist {
+          local function escape_pattern(s)
+            return (s:gsub("([^%w])", "\\%1"))  -- Escape special characters with backslash
+          end
+          local whitelist = ""
+          local f = io.open("/etc/nginx/configmaps/whitelist-ips", "r")
+          if f then
+            for line in f:lines() do
+              local escaped_line = escape_pattern(line:match("^%s*(.-)%s*$"))  -- Trim and escape
+              if whitelist == "" then
+                whitelist = escaped_line
+              else
+                whitelist = whitelist .. "|" .. escaped_line
+              end
+            end
+            f:close()
+          end
+
+          -- Log the resolved whitelist
+          ngx.log(ngx.ERR, "Resolved IP Whitelist: ", whitelist)
+
+          return whitelist
+        }
+
+        # Allow access if the IP is whitelisted or if the client certificate is valid
+        set $allow_access 0;
+
+        set_by_lua_block $ip_valid {
+          local client_ip = ngx.var.remote_addr
+          local whitelist_regex = ngx.var.ip_whitelist
+          
+          -- Perform regex match
+          local matched = ngx.re.match(client_ip, whitelist_regex)
+          
+          if not matched then
+            return 0
+          end
+          
+          return 1
+        }
+
+        # Check the client certificate in Lua and validate
+        set_by_lua_block $client_cert_valid {
+          local client_cert = ngx.var.ssl_client_cert
+          local client_verify = ngx.var.ssl_client_verify
+          ngx.log(ngx.ERR, "Debug: Client Cert: ", client_cert)
+          ngx.log(ngx.ERR, "Debug: Client Cert Verify Status: ", client_verify)
+
+          local client_cert_fingerprint = ngx.var.ssl_client_fingerprint
+
+          ngx.log(ngx.ERR, "Debug: Client Cert Fingerprint: ", ngx.var.ssl_client_fingerprint)
+
+          -- Check if the client certificate fingerprint is in the allowed list
+          local matched_cert = false
+          local f = io.open("/etc/nginx/configmaps/allowed-cert-fingerprints", "r")
+          for fingerprint in f:lines() do
+            ngx.log(ngx.ERR, "Debug: fingerprint on list: ", fingerprint)
+            if client_cert_fingerprint == string.lower(fingerprint) then
+              matched_cert = true
+              break
+            end
+          end
+
+          ngx.log(ngx.ERR, "Debug: Client Cert Fingerprint matched: ", matched_cert)
+
+          if client_verify == "SUCCESS" and matched_cert then
+            return 1
+          else
+            return 0
+          end
+
+        }
+
+        if ($ip_valid = 1) {
+          set $allow_access 1;
+        }
+
+        if ($client_cert_valid = 1) {
+          set $allow_access 1;
+        }
+        
+        if ($allow_access = 0) {
+          return 403;  # Deny access
+        }
+    hosts:
+      - host: 51.138.4.141.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific

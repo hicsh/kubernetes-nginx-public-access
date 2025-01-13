@@ -1,0 +1,7 @@
+ingress-nginx:
+  controller:
+    service:
+      enabled: true
+      type: LoadBalancer
+      externalTrafficPolicy: Local
+    replicaCount: 1

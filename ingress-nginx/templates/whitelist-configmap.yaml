@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-whitelist-config
+data:
+  whitelist-ips: |
+    20.71.218.174
+
+  allowed-cert-fingerprints: |
+    C143CF80EA70635C0ABACA634F0D06837DC31004
+
+

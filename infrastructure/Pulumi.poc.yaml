@@ -1,0 +1,18 @@
+encryptionsalt: v1:e/tUArVvilQ=:v1:Wze9GVSjeZARqQJj:4q8aKIgifB2zRFA5IGBwsSY74oCPOg==
+config:
+  location: westeurope
+  
+  aks:vmSize: Standard_B2s
+  aks:nodeCount: 1
+
+  vm1:adminUsername: pulumiuser
+  vm1:osImage: Debian:debian-11:11:latest
+  vm1:vmName: testvm1
+  vm1:vmSize: Standard_B2s
+  vm1:vmAddressPrefix: "10.0.1.0/24"
+
+  vm2:adminUsername: pulumiuser
+  vm2:osImage: Debian:debian-11:11:latest
+  vm2:vmName: testvm2
+  vm2:vmSize: Standard_B2s
+  vm2:vmAddressPrefix: "10.0.2.0/24"
